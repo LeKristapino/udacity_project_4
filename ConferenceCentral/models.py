@@ -25,7 +25,8 @@ class ConflictException(endpoints.ServiceException):
 
 class Session(ndb.Model):
     """Session -- Conference Session object"""
-    speakerName   = ndb.StringProperty(required=True)
+    name        = ndb.StringProperty(required=True)
+    speakerId   = ndb.StringProperty(required=True)
     conferenceId = ndb.StringProperty(required=True)
     date         = ndb.DateProperty()
     duration     = ndb.IntegerProperty()
@@ -35,14 +36,15 @@ class Session(ndb.Model):
 
 class SessionForm(messages.Message):
     """SessionForm -- Session outbound form message"""
-    speakerName  = messages.StringField(1)
-    conferenceId = messages.StringField(2)
-    date         = messages.StringField(3)
-    startTime    = messages.StringField(4)
-    duration     = messages.IntegerField(5)
-    sessionType  = messages.StringField(6, repeated=True)
-    highlights   = messages.StringField(7, repeated=True)
-    websafeKey   = messages.StringField(8)
+    name         = messages.StringField(1)
+    speakerId    = messages.StringField(2)
+    conferenceId = messages.StringField(3)
+    date         = messages.StringField(4)
+    startTime    = messages.StringField(5)
+    duration     = messages.IntegerField(6)
+    sessionType  = messages.StringField(7, repeated=True)
+    highlights   = messages.StringField(8, repeated=True)
+    websafeKey   = messages.StringField(9)
 
 
 class SessionForms(messages.Message):
@@ -51,8 +53,20 @@ class SessionForms(messages.Message):
 
 
 class Speaker(ndb.Model):
-    """Speaker -- Session and User Speaker object"""
-    name         = ndb.StringProperty(required=True)
+    """Speaker -- Session Speaker object"""
+    name             =ndb.StringProperty(required=True)
+    company          =ndb.StringProperty()
+    sessionsAttended =ndb.StringProperty(repeated=True)
+
+class SpeakerForm(messages.Message):
+    """SpeakerForm -- Speaker outbound form message"""
+    name       = messages.StringField(1)
+    company    = messages.StringField(2)
+    websafeKey = messages.StringField(3)
+
+class SpeakerForms(messages.Message):
+    """SpeakerForms -- multiple Speaker outbound form message"""
+    items = messages.MessageField(SpeakerForm, 1, repeated=True)
 
 class Profile(ndb.Model):
     """Profile -- User profile object"""

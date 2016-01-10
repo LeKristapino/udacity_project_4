@@ -99,3 +99,8 @@ indexes:
   properties:
   - name: conferenceId
   - name: startTime
+
+- kind: Session
+  properties:
+  - name: speakerName
+  - name: sessionType
