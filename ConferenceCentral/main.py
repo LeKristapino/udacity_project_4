@@ -38,7 +38,7 @@ class SendConfirmationEmailHandler(webapp2.RequestHandler):
         )
 
 class SetFeaturedSpeakerHandler(webapp2.RequestHandler):
-    def get(self):
+    def post(self):
         "Cache featured speaker"
         ConferenceApi._cacheFeaturedSpeaker(self.request.get("conference_key"),
                                             self.request.get("speaker_key"))

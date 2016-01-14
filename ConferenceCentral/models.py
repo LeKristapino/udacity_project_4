@@ -56,7 +56,6 @@ class Speaker(ndb.Model):
     """Speaker -- Session Speaker object"""
     name             =ndb.StringProperty(required=True)
     company          =ndb.StringProperty()
-    sessionsAttended =ndb.StringProperty(repeated=True)
 
 class SpeakerForm(messages.Message):
     """SpeakerForm -- Speaker outbound form message"""
@@ -111,7 +110,6 @@ class Conference(ndb.Model):
     endDate         = ndb.DateProperty()
     maxAttendees    = ndb.IntegerProperty()
     seatsAvailable  = ndb.IntegerProperty()
-    sessions        = ndb.StringProperty(repeated=True)
 
 class ConferenceForm(messages.Message):
     """ConferenceForm -- Conference outbound form message"""

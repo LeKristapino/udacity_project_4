@@ -598,7 +598,7 @@ class ConferenceApi(remote.Service):
         # get conference; check that it exists
         wsck = request.websafeConferenceKey
         conf_key = ndb.Key(urlsafe=wsck)
-        conf = ndb.Key(urlsafe=wsck).get()
+        conf = conf_key.get()
         if not conf:
             raise endpoints.NotFoundException(
                     'No conference found with key: %s' % wsck)
@@ -636,23 +636,16 @@ class ConferenceApi(remote.Service):
             data['duration'] *= 60 * 60
 
         Session(**data).put()
-        #Update speakers sesssions
-        speaker.sessionsAttended.append(s_key.urlsafe())
-        speaker.put()
-
-        # save sessions key in Conference sessions
-        conf.sessions.append(s_key.urlsafe())
-        conf.put()
 
         # Memcache featured speakers
-        taskqueue.add(params={'speaker_key': speaker.key.urlsafe,
+        taskqueue.add(params={'speaker_key': data['speakerId'],
                               'conference_key': wsck},
                       url='/tasks/set_featured_speaker'
                       )
         return self._copySessionToForm(ndb.Key(Session, s_id, parent=conf_key).get())
 
     def _copySessionToForm(self, session):
-        """Copy relevant fields from Conference to ConferenceForm."""
+        """Copy relevant fields from Session to SessionForm."""
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(session, field.name):
@@ -681,9 +674,8 @@ class ConferenceApi(remote.Service):
         if not conf:
             raise endpoints.NotFoundException(
                     'No conference found with key: %s' % wsck)
-        session_keys = [ndb.Key(urlsafe=session_id) for session_id in conf.sessions]
         # fetch sessions
-        sessions = ndb.get_multi(session_keys)
+        sessions = Session.query(Session.conferenceId == wsck)
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
 
@@ -694,14 +686,12 @@ class ConferenceApi(remote.Service):
     def getConferenceSessionsByType(self, request):
         """Return requested sessions for a conference (by websafeConferenceKey) with specific type."""
         wsck = request.websafeConferenceKey
-        conf_key = ndb.Key(urlsafe=wsck)
         conf = ndb.Key(urlsafe=wsck).get()
         if not conf:
             raise endpoints.NotFoundException(
                     'No conference found with key: %s' % wsck)
-        session_keys = [ndb.Key(urlsafe=session_id) for session_id in conf.sessions]
         # fetch sessions filtered by sessionType
-        sessions = Session.query(Session.key in session_keys and Session.sessionType == request.sessionType)
+        sessions = Session.query(Session.conferenceId == wsck and Session.sessionType == request.sessionType)
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
 
@@ -710,9 +700,8 @@ class ConferenceApi(remote.Service):
                       name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
         """Return all sessions with a specific speaker."""
-        speaker = ndb.Key(urlsafe=request.websafeSpeakerKey).get()
-        session_keys = [ndb.Key(urlsafe=wssk) for wssk in speaker.sessionsAttended]
-        sessions = ndb.get_multi(session_keys)
+        wssk = request.websafeSpeakerKey
+        sessions = Session.query(Session.speakerId == wssk)
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
@@ -769,10 +758,8 @@ class ConferenceApi(remote.Service):
 
     #  # - - - Wishlist methods - - - - - - - - - - - - - - - - -
 
-    @endpoints.method(WISH_POST_REQUEST, BooleanMessage,
-                      path='session/{websafeSessionKey}/wishlist',
-                      http_method='POST', name='addSessionToWishlist')
-    def addSessionToWishlist(self, request):
+    @ndb.transactional()
+    def _appendToWishlist(self, request):
         """Add session to users wishlist."""
         profile = self._getProfileFromUser()
         retval = None
@@ -795,22 +782,8 @@ class ConferenceApi(remote.Service):
 
         return BooleanMessage(data=retval, message=error_message)
 
-
-    @endpoints.method(message_types.VoidMessage, SessionForms,
-                      path='user/wishlist', http_method='GET', name='getSessionsInWishlist')
-    def getSessionsInWishlist(self, request):
-        """Get sessions from users wishlist."""
-        profile = self._getProfileFromUser()
-        session_keys = [ndb.Key(urlsafe=wssk) for wssk in profile.wishlist]
-        sessions = ndb.get_multi(session_keys)
-        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
-
-
-
-    @endpoints.method(WISH_POST_REQUEST, BooleanMessage,
-                      path='user/wishlist/{websafeSessionKey}/remove', http_method='DELETE',
-                      name='deleteSessionInWishlist')
-    def deleteSessionInWishlist(self, request):
+    @ndb.transactional()
+    def _removeFromWishlist(self, request):
         """Remove session from users wishlist."""
         retval= None
         error_message=""
@@ -831,6 +804,30 @@ class ConferenceApi(remote.Service):
             retval=True
 
         return BooleanMessage(data=retval, message=error_message)
+
+    @endpoints.method(WISH_POST_REQUEST, BooleanMessage,
+                      path='session/{websafeSessionKey}/wishlist',
+                      http_method='POST', name='addSessionToWishlist')
+    def addSessionToWishlist(self, request):
+        return self._appendToWishlist(request)
+
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+                      path='user/wishlist', http_method='GET', name='getSessionsInWishlist')
+    def getSessionsInWishlist(self, request):
+        """Get sessions from users wishlist."""
+        profile = self._getProfileFromUser()
+        session_keys = [ndb.Key(urlsafe=wssk) for wssk in profile.wishlist]
+        sessions = ndb.get_multi(session_keys)
+        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
+
+
+
+    @endpoints.method(WISH_POST_REQUEST, BooleanMessage,
+                      path='user/wishlist/{websafeSessionKey}/remove', http_method='DELETE',
+                      name='deleteSessionInWishlist')
+    def deleteSessionInWishlist(self, request):
+        return self._removeFromWishlist(request)
 
     #Additional queries
     @endpoints.method(CONF_GET_REQUEST, SessionForms,
@@ -883,11 +880,11 @@ class ConferenceApi(remote.Service):
         """Check if speaker is in two or more sessions at a given conference and add an entry to Memcache if true"""
         conf = ndb.Key(urlsafe=websafeConferenceKey).get()
         speaker = ndb.Key(urlsafe=websafeSpeakerKey).get()
-        session_ids = list(set(conf.sessions).intersection(speaker.sessionsAttended))
-        if session_ids.count() >= 2:
-            session_keys = [ndb.Key(urlsafe=s_id) for s_id in session_ids]
-            sessions = ndb.get_multi(session_keys)
-            string = speaker.name % (', '.join(session.name for session in sessions))
+        speaker_sessions = Session.query(Session.speakerId == websafeSpeakerKey and
+                                         Session.conferenceId == websafeConferenceKey)
+        if speaker_sessions.count() >= 2:
+            print (session.name for session in speaker_sessions)
+            string = speaker.name +":"+ (', '.join(session.name for session in speaker_sessions))
             memcache.set(websafeConferenceKey, string)
         return string
 

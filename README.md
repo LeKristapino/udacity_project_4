@@ -13,7 +13,15 @@ Short Description: ConferenceCentral App for Udacity Full stack nano degree prog
 - [Google Cloud Endpoints][3]
 
 ## Setup Instructions
+#### To access online API
 1. To use the provided API, please go to https://udacity-kkproject4.appspot.com/_ah/api/explorer
+
+#### To access on local machine
+1. Update the value of application in app.yaml to the app ID you have registered in the App Engine admin console and would like to use to host your instance of this sample.
+1. Update the values at the top of settings.py to reflect the respective client IDs you have registered in the Developer Console.
+1. Update the value of CLIENT_ID in static/js/app.js to the Web client ID
+1. Run the app with the devserver using dev_appserver.py DIR, and ensure it's running by visiting your local server's address (by default localhost:8080.)
+
 
 ##Session design choices
 Session object has all the attributes required by instructions.
